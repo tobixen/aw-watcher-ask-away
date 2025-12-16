@@ -73,6 +73,25 @@ Available options:
 - `--testing`: Run in testing mode
 - `--verbose`: Enable verbose logging
 
+### Lid Watcher Integration (Optional)
+
+This watcher can integrate with [aw-watcher-lid](https://github.com/tobixen/aw-watcher-lid) to also prompt you about laptop lid closures and system suspends, not just regular AFK periods.
+
+**Why use both watchers?**
+- Regular AFK: Detects when you step away from keyboard but leave computer running
+- Lid events: Provides exact timestamps for when you close/open your laptop lid or suspend/resume the system
+- Combined: More complete picture of when you're away from your computer
+
+**Setup:**
+1. Install aw-watcher-lid: `pipx install aw-watcher-lid`
+2. Start it (see [aw-watcher-lid README](https://github.com/tobixen/aw-watcher-lid#readme) for setup)
+3. aw-watcher-ask-away will automatically detect and use it
+
+**To disable lid integration:**
+Set `enable_lid_events = false` in your config file.
+
+**Note:** aw-watcher-lid is an optional third-party watcher, not part of the standard ActivityWatch distribution.
+
 ## Roadmap
 
 Most of the improvements involve a more complicated pop-up window.

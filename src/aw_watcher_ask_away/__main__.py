@@ -31,7 +31,7 @@ def prompt(event: aw_core.Event, recent_events: Iterable[aw_core.Event]):
     return aw_dialog.ask_string(title, prompt, [event.data[DATA_KEY] for event in recent_events])
 
 
-def get_state_retries(client: ActivityWatchClient):
+def get_state_retries(client: ActivityWatchClient, enable_lid_events: bool = True):
     """When the computer is starting up sometimes the aw-server is not ready for requests yet.
 
     So we sit and retry for a while before giving up.
@@ -40,7 +40,7 @@ def get_state_retries(client: ActivityWatchClient):
         try:
             # This works because the constructor of AWAskAwayState tries to get bucket names.
             # If it didn't we'd need to do something else here.
-            return AWAskAwayClient(client)
+            return AWAskAwayClient(client, enable_lid_events=enable_lid_events)
         except ConnectionError:
             logger.exception("Cannot connect to client.")
             time.sleep(10)  # 10 * 10 = wait for 100s before giving up.
@@ -88,7 +88,7 @@ def main():
             client_name=WATCHER_NAME, testing=args.testing
         )
         with client:
-            state = get_state_retries(client)
+            state = get_state_retries(client, enable_lid_events=config.get("enable_lid_events", True))
             logger.info("Successfully connected to the server.")
 
             while True:

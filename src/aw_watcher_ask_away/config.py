@@ -11,6 +11,12 @@ frequency = 5.0
 
 # Number of minutes you need to be away before reporting on it
 length = 5.0
+
+# Enable integration with aw-watcher-lid for lid/suspend events
+# OPTIONAL: Requires aw-watcher-lid to be installed and running
+# See: https://github.com/tobixen/aw-watcher-lid
+# When enabled, you'll be prompted about lid closures in addition to regular AFK
+enable_lid_events = true
 """.strip()
 
 
