@@ -263,17 +263,23 @@ class AWAskAwayState:
         The second query returns an overlapping 'not-afk' event with a slightly earlier timestamp.
         This duplication + offset combination was causing us to double ask the user for input.
         Using overlaps with a percentage is more robust against this kind of thing.
+
+        Note: We compare overlap against the SMALLER of the two durations because gaps can
+        extend over time as new activity data comes in. If we compared against the new (larger)
+        duration, we'd fail to recognize the same gap and ask the user again.
         """  # noqa: E501
         for recent in self.recent_events:
             overlap_start = max(recent.timestamp, new.timestamp)
             overlap_end = min(recent.timestamp + recent.duration, new.timestamp + new.duration)
             overlap = overlap_end - overlap_start
-            if overlap / new.duration > overlap_thresh:
+            if overlap.total_seconds() <= 0:
+                continue  # No overlap
+            min_duration = min(recent.duration, new.duration)
+            if overlap / min_duration > overlap_thresh:
                 return True
         return False
 
-<<<<<<< HEAD
-    def mark_event_as_seen(self, event: aw_core.Event):
+    def mark_event_as_seen(self, event: aw_core.Event) -> None:
         """Mark an event as seen (add to recent_events) to prevent re-prompting.
 
         This should only be called AFTER the event has been successfully posted.
@@ -283,14 +289,6 @@ class AWAskAwayState:
             self.recent_events.append(event)
         else:
             logger.debug(f"Event already marked as seen: {event}")
-=======
-    def add_event(self, event: aw_core.Event, message: str) -> None:
-        assert not self.has_event(event)  # noqa: S101
-        event.data[DATA_KEY] = message
-        event["id"] = None  # Wipe the ID so we don't edit the AFK event.
-        logger.debug(f"Posting event: {event}")
-        self.recent_events.append(event)
->>>>>>> 173f2c6 (Add missing return type annotations)
 
     def get_unseen_afk_events(self, events: list[aw_core.Event], recency_thresh: float, durration_thresh: float) -> Iterator[aw_core.Event]:
         """Check whether we recently finished a large AFK event.

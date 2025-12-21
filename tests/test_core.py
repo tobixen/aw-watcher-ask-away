@@ -74,7 +74,7 @@ def test_double_ask_1():
     state = AWAskAwayState([])
     first_unseen = list(state.get_unseen_afk_events(first, INF, 3 * 60))
     for event in first_unseen:
-        state.add_event(event, "message")
+        state.mark_event_as_seen(event)
 
     second_unseen = list(state.get_unseen_afk_events(second, INF, 3 * 60))
     assert len(second_unseen) == 1
@@ -101,7 +101,7 @@ def test_double_ask_suspend_afk():
     state = AWAskAwayState([])
     first_unseen = list(state.get_unseen_afk_events(first, INF, 3 * 60))
     for event in first_unseen:
-        state.add_event(event, "message")
+        state.mark_event_as_seen(event)
     # This is the main thing being tested. If there are three events then we will be asked to put in duplicate information in the next step.
     assert len(first_unseen) == 2
 
