@@ -401,7 +401,8 @@ class AWAskAwayDialog(simpledialog.Dialog):
 
 
 def ask_string(title: str, prompt: str, history: list[str],
-               afk_start=None, afk_duration_seconds=None) -> str | None | tuple:
+               afk_start=None, afk_duration_seconds=None,
+               initial_value: str | None = None) -> str | None | tuple:
     """Ask for a string input, with optional split mode support.
 
     Args:
@@ -410,6 +411,7 @@ def ask_string(title: str, prompt: str, history: list[str],
         history: List of previous entries for history navigation
         afk_start: Start time of AFK period (optional, enables split mode)
         afk_duration_seconds: Duration of AFK period in seconds (optional)
+        initial_value: Pre-fill the entry with this value (for editing)
 
     Returns:
         String input from user, or None if cancelled
@@ -417,11 +419,11 @@ def ask_string(title: str, prompt: str, history: list[str],
         the calling code should use ask_split_activities instead.
     """
     # Loop to handle switching between single and split modes
-    initial_text = None
+    initial_text = initial_value
     while True:
         d = AWAskAwayDialog(title, prompt, history, afk_start, afk_duration_seconds)
 
-        # If returning from split mode, pre-fill the text
+        # Pre-fill with initial value or text from split mode
         if initial_text:
             d.entry.delete(0, tk.END)
             d.entry.insert(0, initial_text)

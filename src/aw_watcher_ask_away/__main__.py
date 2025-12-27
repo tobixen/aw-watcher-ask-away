@@ -38,6 +38,45 @@ def prompt(event: aw_core.Event, recent_events: Iterable[aw_core.Event]) -> str 
     )
 
 
+def prompt_edit(event: aw_core.Event, recent_events: Iterable[aw_core.Event]) -> str | None:
+    """Prompt to edit an existing event."""
+    start_time_str = format_time_local(event.timestamp)
+    end_time_str = format_time_local(event.timestamp + event.duration)
+    current_msg = event.data.get(DATA_KEY, '')
+    prompt_text = f"Edit entry for {start_time_str} - {end_time_str} ({event.duration.total_seconds() / 60:.1f} min)"
+    title = "Edit AFK Entry"
+
+    return aw_dialog.ask_string(
+        title,
+        prompt_text,
+        [event.data.get(DATA_KEY, '') for event in recent_events],
+        afk_start=event.timestamp,
+        afk_duration_seconds=event.duration.total_seconds(),
+        initial_value=current_msg
+    )
+
+
+def parse_date(date_str: str):
+    """Parse date string into start and end datetime."""
+    from datetime import datetime, timedelta, UTC
+
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if date_str == "today":
+        start = today
+    elif date_str == "yesterday":
+        start = today - timedelta(days=1)
+    else:
+        # Try to parse as YYYY-MM-DD
+        try:
+            start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=UTC)
+        except ValueError:
+            raise ValueError(f"Invalid date format: {date_str}. Use YYYY-MM-DD, 'today', or 'yesterday'.")
+
+    end = start + timedelta(days=1)
+    return start, end
+
+
 def get_state_retries(client: ActivityWatchClient, enable_lid_events: bool = True,
                       history_limit: int = 100) -> AWAskAwayClient:
     """When the computer is starting up sometimes the aw-server is not ready for requests yet.
@@ -110,6 +149,17 @@ def main() -> None:
         default=config.get("backfill_depth", 1440),
         help="How far back (in minutes) to look for unfilled AFK periods (default: 1440 = 24h).",
     )
+    parser.add_argument(
+        "--edit",
+        action="store_true",
+        help="Edit mode - review and edit past entries, then exit.",
+    )
+    parser.add_argument(
+        "--edit-date",
+        type=str,
+        default="today",
+        help="Date to edit entries for (default: today). Format: YYYY-MM-DD or 'today', 'yesterday'.",
+    )
     args = parser.parse_args()
 
     # Set up logging
@@ -159,6 +209,70 @@ def main() -> None:
 
         logger.info("Exiting test dialog mode")
         # Exit after showing test dialog
+        return
+
+    # Edit mode - review and edit past entries
+    if args.edit:
+        from datetime import datetime, UTC
+        import aw_transform
+
+        try:
+            start_date, end_date = parse_date(args.edit_date)
+        except ValueError as e:
+            logger.error(str(e))
+            return
+
+        logger.info(f"Edit mode: reviewing entries from {args.edit_date}")
+
+        try:
+            client = ActivityWatchClient(
+                client_name=WATCHER_NAME, testing=args.testing
+            )
+            with client:
+                bucket_id = f"{WATCHER_NAME}_{client.client_hostname}"
+
+                # Fetch events for the date range
+                events = client.get_events(bucket_id, limit=1000, start=start_date, end=end_date)
+                events = aw_transform.sort_by_timestamp(events)
+
+                if not events:
+                    logger.info(f"No entries found for {args.edit_date}")
+                    return
+
+                logger.info(f"Found {len(events)} entries to review")
+
+                edited_count = 0
+                skipped_count = 0
+
+                for event in events:
+                    current_msg = event.data.get(DATA_KEY, '')
+                    response = prompt_edit(event, events)
+
+                    if response is None:
+                        # User cancelled - skip
+                        skipped_count += 1
+                        continue
+                    elif isinstance(response, tuple) and response[0] == "SPLIT_MODE":
+                        # Split mode not supported for editing existing events
+                        logger.warning("Split mode not supported when editing. Skipping.")
+                        skipped_count += 1
+                        continue
+                    elif response != current_msg:
+                        # Update the event
+                        event.data[DATA_KEY] = response
+                        client.insert_event(bucket_id, event)
+                        logger.info(f"Updated: '{current_msg}' -> '{response}'")
+                        edited_count += 1
+                    else:
+                        # No change
+                        skipped_count += 1
+
+                logger.info(f"Edit complete: {edited_count} edited, {skipped_count} skipped")
+
+        except Exception as e:
+            logger.error(f"Edit mode error: {e}")
+            raise
+
         return
 
     try:
