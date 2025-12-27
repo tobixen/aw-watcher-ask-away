@@ -38,24 +38,6 @@ def prompt(event: aw_core.Event, recent_events: Iterable[aw_core.Event]) -> str 
     )
 
 
-def prompt_edit(event: aw_core.Event, recent_events: Iterable[aw_core.Event]) -> str | None:
-    """Prompt to edit an existing event."""
-    start_time_str = format_time_local(event.timestamp)
-    end_time_str = format_time_local(event.timestamp + event.duration)
-    current_msg = event.data.get(DATA_KEY, '')
-    prompt_text = f"Edit entry for {start_time_str} - {end_time_str} ({event.duration.total_seconds() / 60:.1f} min)"
-    title = "Edit AFK Entry"
-
-    return aw_dialog.ask_string(
-        title,
-        prompt_text,
-        [event.data.get(DATA_KEY, '') for event in recent_events],
-        afk_start=event.timestamp,
-        afk_duration_seconds=event.duration.total_seconds(),
-        initial_value=current_msg
-    )
-
-
 def parse_date(date_str: str):
     """Parse date string into start and end datetime."""
     from datetime import datetime, timedelta, UTC
@@ -215,6 +197,7 @@ def main() -> None:
     if args.edit:
         from datetime import datetime, UTC
         import aw_transform
+        from aw_watcher_ask_away.dialog import ask_batch_edit
 
         try:
             start_date, end_date = parse_date(args.edit_date)
@@ -226,7 +209,7 @@ def main() -> None:
 
         try:
             client = ActivityWatchClient(
-                client_name=WATCHER_NAME, testing=args.testing
+                client_name=WATCHER_NAME + '_edit', testing=args.testing
             )
             with client:
                 bucket_id = f"{WATCHER_NAME}_{client.client_hostname}"
@@ -241,33 +224,25 @@ def main() -> None:
 
                 logger.info(f"Found {len(events)} entries to review")
 
+                # Show batch edit dialog
+                title = f"Edit Entries - {args.edit_date}"
+                result = ask_batch_edit(title, events, format_time_local)
+
+                if result is None:
+                    logger.info("Edit cancelled")
+                    return
+
+                # Process changes
                 edited_count = 0
-                skipped_count = 0
-
-                for event in events:
+                for event, new_value in result:
                     current_msg = event.data.get(DATA_KEY, '')
-                    response = prompt_edit(event, events)
-
-                    if response is None:
-                        # User cancelled - skip
-                        skipped_count += 1
-                        continue
-                    elif isinstance(response, tuple) and response[0] == "SPLIT_MODE":
-                        # Split mode not supported for editing existing events
-                        logger.warning("Split mode not supported when editing. Skipping.")
-                        skipped_count += 1
-                        continue
-                    elif response != current_msg:
-                        # Update the event
-                        event.data[DATA_KEY] = response
+                    if new_value != current_msg:
+                        event.data[DATA_KEY] = new_value
                         client.insert_event(bucket_id, event)
-                        logger.info(f"Updated: '{current_msg}' -> '{response}'")
+                        logger.info(f"Updated: '{current_msg}' -> '{new_value}'")
                         edited_count += 1
-                    else:
-                        # No change
-                        skipped_count += 1
 
-                logger.info(f"Edit complete: {edited_count} edited, {skipped_count} skipped")
+                logger.info(f"Edit complete: {edited_count} entries updated")
 
         except Exception as e:
             logger.error(f"Edit mode error: {e}")

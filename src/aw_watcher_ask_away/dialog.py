@@ -400,6 +400,121 @@ class AWAskAwayDialog(simpledialog.Dialog):
         box.pack()
 
 
+class BatchEditDialog(simpledialog.Dialog):
+    """Dialog for editing multiple entries at once."""
+
+    def __init__(self, title: str, events: list, format_time_func) -> None:
+        """Initialize batch edit dialog.
+
+        Args:
+            title: Dialog window title
+            events: List of aw_core.Event objects to edit
+            format_time_func: Function to format timestamps for display
+        """
+        self.events = events
+        self.format_time = format_time_func
+        self.entries: list[ttk.Entry] = []
+        self.result: list[tuple] | None = None  # List of (event, new_value) tuples
+        super().__init__(root, title)
+
+    def body(self, master):
+        master = ttk.Frame(master)
+        master.grid()
+
+        # Create scrollable frame
+        canvas = tk.Canvas(master, width=600, height=400)
+        scrollbar = ttk.Scrollbar(master, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas.bind_all("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
+        canvas.bind_all("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
+
+        # Header
+        ttk.Label(scrollable_frame, text="Time", font=("", 9, "bold")).grid(
+            row=0, column=0, padx=5, pady=2, sticky="w"
+        )
+        ttk.Label(scrollable_frame, text="Duration", font=("", 9, "bold")).grid(
+            row=0, column=1, padx=5, pady=2, sticky="w"
+        )
+        ttk.Label(scrollable_frame, text="Description", font=("", 9, "bold")).grid(
+            row=0, column=2, padx=5, pady=2, sticky="w"
+        )
+
+        # Create entry for each event
+        for i, event in enumerate(self.events):
+            row = i + 1
+            start_str = self.format_time(event.timestamp)
+            duration_min = event.duration.total_seconds() / 60
+            current_msg = event.data.get("message", "")
+
+            ttk.Label(scrollable_frame, text=start_str).grid(
+                row=row, column=0, padx=5, pady=2, sticky="w"
+            )
+            ttk.Label(scrollable_frame, text=f"{duration_min:.0f}m").grid(
+                row=row, column=1, padx=5, pady=2, sticky="w"
+            )
+
+            entry = ttk.Entry(scrollable_frame, width=50)
+            entry.insert(0, current_msg)
+            entry.grid(row=row, column=2, padx=5, pady=2, sticky="ew")
+            self.entries.append(entry)
+
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
+        # Focus first entry
+        if self.entries:
+            return self.entries[0]
+
+    def buttonbox(self):
+        box = ttk.Frame(self)
+
+        w = ttk.Button(box, text="Save All", width=12, command=self.ok, default=tk.ACTIVE)
+        w.pack(side=tk.LEFT, padx=5, pady=5)
+        w = ttk.Button(box, text="Cancel", width=12, command=self.cancel)
+        w.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.bind("<Return>", self.ok)
+        self.bind("<Escape>", self.cancel)
+
+        box.pack()
+
+    def apply(self):
+        """Collect all edited values."""
+        self.result = []
+        for event, entry in zip(self.events, self.entries):
+            new_value = entry.get().strip()
+            self.result.append((event, new_value))
+
+
+def ask_batch_edit(title: str, events: list, format_time_func) -> list[tuple] | None:
+    """Show batch edit dialog for multiple events.
+
+    Args:
+        title: Dialog title
+        events: List of events to edit
+        format_time_func: Function to format timestamps
+
+    Returns:
+        List of (event, new_value) tuples, or None if cancelled
+    """
+    d = BatchEditDialog(title, events, format_time_func)
+    return d.result
+
+
 def ask_string(title: str, prompt: str, history: list[str],
                afk_start=None, afk_duration_seconds=None,
                initial_value: str | None = None) -> str | None | tuple:
