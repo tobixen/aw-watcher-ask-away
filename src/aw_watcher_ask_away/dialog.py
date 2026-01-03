@@ -345,7 +345,7 @@ class AWAskAwayDialog(simpledialog.Dialog):
     def submit_unknown(self, event=None):  # noqa: ARG002
         """Quick dismiss as UNKNOWN."""
         self.result = "UNKNOWN"
-        self.destroy()
+        self.cancel()
 
     def open_config(self, event=None):  # noqa: ARG002
         ConfigDialog(self)
